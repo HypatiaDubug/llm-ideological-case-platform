@@ -38,7 +38,7 @@
       </el-col>
       <el-col :xs="24" :md="10">
         <div class="card">
-          <div class="chart-title">五大思政指标案例占比</div>
+          <div class="chart-title">案例来源分布</div>
           <div ref="pieRef" class="chart"></div>
         </div>
       </el-col>
@@ -93,7 +93,7 @@ function renderCharts(data) {
           center: ['50%', '46%'],
           itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
           label: { formatter: '{b}: {d}%' },
-          data: data.indexRatio.map((d) => ({ name: d.name, value: d.value })),
+          data: data.sourceDistribution.map((d) => ({ name: d.name, value: d.value })),
         },
       ],
     })
@@ -107,7 +107,7 @@ function handleResize() {
 
 onMounted(async () => {
   const res = await getStatisticsApi()
-  if (res.code === 200) {
+  if (res.code === 0) {
     stats.value = res.data
     renderCharts(res.data)
   }

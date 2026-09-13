@@ -14,6 +14,7 @@
       </div>
       <div class="summary clamp-2">{{ item.teaching_value || item.background }}</div>
       <div class="meta">
+        <el-tag size="small" :type="sourceTypeTag" effect="light">{{ sourceTypeName }}</el-tag>
         <span class="profession clamp-1">{{ professionText }}</span>
         <span class="views">
           <el-icon><View /></el-icon>{{ item.views }}
@@ -45,6 +46,15 @@ defineEmits(['detail', 'favorite'])
 const ideological = computed(() => props.item.ideological_elements || [])
 const professionText = computed(() => (props.item.profession || []).join(' / '))
 const isFav = computed(() => props.item.isFavorite)
+// 来源方式取值见需求规格文档 V1.0 §4.8，值本身即为中文
+const sourceTypeMap = {
+  网络采集: 'primary',
+  人工导入: 'info',
+  教师上传: 'warning',
+  AI生成: 'success',
+}
+const sourceTypeName = computed(() => props.item.sourceType || '未知')
+const sourceTypeTag = computed(() => sourceTypeMap[props.item.sourceType] || 'info')
 </script>
 
 <style scoped>

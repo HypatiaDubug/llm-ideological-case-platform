@@ -6,8 +6,9 @@
         <div class="toolbar">
           <el-radio-group v-model="statusFilter" @change="reloadAudit">
             <el-radio-button value="待审核">待审核</el-radio-button>
-            <el-radio-button value="审核通过">审核通过</el-radio-button>
+            <el-radio-button value="已发布">已发布</el-radio-button>
             <el-radio-button value="审核驳回">审核驳回</el-radio-button>
+            <el-radio-button value="需补充">需补充</el-radio-button>
           </el-radio-group>
         </div>
         <el-table v-loading="auditLoading" :data="auditList" stripe>
@@ -24,16 +25,17 @@
               <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="驳回原因" min-width="140" align="center">
+          <el-table-column label="原因/补充要求" min-width="140" align="center">
             <template #default="{ row }">
-              <span class="reject">{{ row.status === '审核驳回' ? row.rejectReason : '-' }}</span>
+              <span class="reject">{{ row.status === '审核驳回' || row.status === '需补充' ? row.rejectReason : '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="审核操作" width="200" fixed="right" align="center">
+          <el-table-column label="审核操作" width="260" fixed="right" align="center">
             <template #default="{ row }">
               <template v-if="row.status === '待审核'">
                 <el-button size="small" type="success" :icon="Check" @click="passAudit(row)">通过</el-button>
-                <el-button size="small" type="danger" plain :icon="Close" @click="openReject(row)">驳回</el-button>
+                <el-button size="small" type="warning" plain :icon="EditPen" @click="openAudit(row, 'supplement')">需补充</el-button>
+                <el-button size="small" type="danger" plain :icon="Close" @click="openAudit(row, 'reject')">驳回</el-button>
               </template>
               <el-tag v-else size="small" type="info">已处理</el-tag>
             </template>
@@ -78,18 +80,27 @@
           <el-table-column label="发布时间" width="100" align="center">
             <template #default="{ row }">{{ formatDate(row.publish_date) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right" align="center">
+          <el-table-column label="操作" width="260" fixed="right" align="center">
             <template #default="{ row }">
               <el-button size="small" @click="openEdit(row)">编辑</el-button>
               <el-button
                 size="small"
-                :type="row.review_status === '已归档' ? 'success' : 'warning'"
+                :type="row.review_status === '已下线' ? 'success' : 'warning'"
                 plain
+                :disabled="row.review_status !== '已发布' && row.review_status !== '已下线'"
                 @click="toggleStatus(row)"
               >
-                {{ row.review_status === '已归档' ? '恢复上架' : '归档' }}
+                {{ row.review_status === '已下线' ? '重新发布' : '下线' }}
               </el-button>
-              <el-button size="small" type="danger" plain @click="removeCase(row)">删除</el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :disabled="row.review_status !== '草稿'"
+                @click="removeCase(row)"
+              >
+                删除
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -125,17 +136,19 @@
       </div>
     </el-dialog>
 
-    <!-- 驳回弹窗 -->
-    <el-dialog v-model="rejectVisible" title="驳回案例" width="480px">
+    <!-- 驳回 / 需补充 弹窗 -->
+    <el-dialog v-model="rejectVisible" :title="auditMode === 'supplement' ? '标记需补充' : '驳回案例'" width="480px">
       <el-input
         v-model="rejectReason"
         type="textarea"
         :rows="4"
-        placeholder="请填写驳回原因，将反馈给提交人"
+        :placeholder="auditMode === 'supplement' ? '请填写需补充的内容要求，反馈给提交人补充后重新提交' : '请填写驳回原因，将反馈给提交人'"
       />
       <template #footer>
         <el-button @click="rejectVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmReject">确认驳回</el-button>
+        <el-button :type="auditMode === 'supplement' ? 'warning' : 'danger'" @click="confirmAudit">
+          {{ auditMode === 'supplement' ? '确认需补充' : '确认驳回' }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -203,21 +216,21 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Close } from '@element-plus/icons-vue'
+import { Check, Close, EditPen } from '@element-plus/icons-vue'
 import {
   getReviewListApi,
   reviewCaseApi,
   getCaseListApi,
   updateCaseApi,
   deleteCaseApi,
+  offlineCaseApi,
   importCasesApi,
   exportCasesApi,
 } from '@/api'
 import { CASE_CATEGORIES, PROFESSIONS } from '@/api/mockData'
 
 const statusTypeMap = {
-  待处理: 'info', 待审核: 'warning', 审核通过: 'success',
-  审核驳回: 'danger', 需补充: 'warning', 已归档: 'info',
+  草稿: 'info', 待审核: 'warning', 已发布: 'success', 审核驳回: 'danger', 需补充: 'warning', 已下线: 'info',
 }
 const statusType = (s) => statusTypeMap[s] || 'info'
 
@@ -238,7 +251,7 @@ async function loadAudit() {
   auditLoading.value = true
   try {
     const res = await getReviewListApi({ page: auditForm.page, size: auditForm.size, status: statusFilter.value })
-    if (res.code === 200) {
+    if (res.code === 0) {
       auditList.value = res.data.records
       auditTotal.value = res.data.total
     }
@@ -264,13 +277,13 @@ function viewSubmit(row) {
 
 async function passAudit(row) {
   try {
-    await ElMessageBox.confirm(`确认通过「${row.title}」吗？通过后将进入案例库。`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认通过「${row.title}」吗？通过后案例将发布上线。`, '审核确认', { type: 'warning' })
   } catch {
     return
   }
-  const res = await reviewCaseApi({ caseSubmitId: row.id, status: '审核通过' })
-  if (res.code === 200) {
-    ElMessage.success('已通过，案例已入库')
+  const res = await reviewCaseApi({ caseSubmitId: row.id, status: '已发布' })
+  if (res.code === 0) {
+    ElMessage.success('已通过，案例已发布')
     loadAudit()
   }
 }
@@ -278,19 +291,22 @@ async function passAudit(row) {
 const rejectVisible = ref(false)
 const rejectReason = ref('')
 const rejectRow = ref(null)
-function openReject(row) {
+const auditMode = ref('reject')
+function openAudit(row, mode) {
   rejectRow.value = row
+  auditMode.value = mode
   rejectReason.value = ''
   rejectVisible.value = true
 }
-async function confirmReject() {
+async function confirmAudit() {
   if (!rejectReason.value.trim()) {
-    ElMessage.warning('请填写驳回原因')
+    ElMessage.warning(auditMode.value === 'supplement' ? '请填写需补充的内容要求' : '请填写驳回原因')
     return
   }
-  const res = await reviewCaseApi({ caseSubmitId: rejectRow.value.id, status: '审核驳回', rejectReason: rejectReason.value })
-  if (res.code === 200) {
-    ElMessage.success('已驳回')
+  const status = auditMode.value === 'supplement' ? '需补充' : '审核驳回'
+  const res = await reviewCaseApi({ caseSubmitId: rejectRow.value.id, status, rejectReason: rejectReason.value })
+  if (res.code === 0) {
+    ElMessage.success(status === '需补充' ? '已标记需补充' : '已驳回')
     rejectVisible.value = false
     loadAudit()
   }
@@ -306,7 +322,7 @@ async function loadCases() {
   caseLoading.value = true
   try {
     const res = await getCaseListApi({ page: caseForm.page, size: caseForm.size, includeAll: true })
-    if (res.code === 200) {
+    if (res.code === 0) {
       caseList.value = res.data.records
       caseTotal.value = res.data.total
     }
@@ -336,36 +352,59 @@ function openEdit(row) {
 }
 async function saveEdit() {
   const res = await updateCaseApi(editForm.id, editForm)
-  if (res.code === 200) {
+  if (res.code === 0) {
     ElMessage.success('保存成功')
     editVisible.value = false
     loadCases()
   }
 }
 
+// 已发布 → 下线（需填原因）；已下线 → 重新发布（见 V1.0 §3.2.4）
 async function toggleStatus(row) {
-  const target = row.review_status === '已归档' ? '审核通过' : '已归档'
-  const action = target === '已归档' ? '归档' : '恢复上架'
-  try {
-    await ElMessageBox.confirm(`确定${action}「${row.title}」吗？`, '提示', { type: 'warning' })
-  } catch {
-    return
-  }
-  const res = await updateCaseApi(row.id, { review_status: target })
-  if (res.code === 200) {
-    ElMessage.success(`已${action}`)
-    loadCases()
+  if (row.review_status === '已发布') {
+    let reason = ''
+    try {
+      const { value } = await ElMessageBox.prompt('请输入下线原因', `下线「${row.title}」`, {
+        inputPlaceholder: '例如：来源链接失效 / 内容需要修正',
+        inputValidator: (v) => (v && v.trim() ? true : '请填写下线原因'),
+        type: 'warning',
+      })
+      reason = value
+    } catch {
+      return
+    }
+    const res = await offlineCaseApi(row.id, reason)
+    if (res.code === 0) {
+      ElMessage.success('已下线')
+      loadCases()
+    }
+  } else if (row.review_status === '已下线') {
+    try {
+      await ElMessageBox.confirm(`确定将「${row.title}」重新上线发布吗？`, '提示', { type: 'warning' })
+    } catch {
+      return
+    }
+    const res = await updateCaseApi(row.id, { review_status: '已发布' })
+    if (res.code === 0) {
+      ElMessage.success('已重新发布')
+      loadCases()
+    }
   }
 }
 
+// 仅「草稿」可删除（见 V1.0 §3.2.4）
 async function removeCase(row) {
+  if (row.review_status !== '草稿') {
+    ElMessage.warning('仅“草稿”状态的案例可删除')
+    return
+  }
   try {
     await ElMessageBox.confirm(`确定删除「${row.title}」吗？删除后不可恢复。`, '删除确认', { type: 'warning' })
   } catch {
     return
   }
   const res = await deleteCaseApi(row.id)
-  if (res.code === 200) {
+  if (res.code === 0) {
     ElMessage.success('已删除')
     loadCases()
   }
@@ -396,8 +435,8 @@ async function doImport() {
       })
     }
     const res = await importCasesApi(rows)
-    if (res.code === 200) {
-      ElMessage.success(res.msg)
+    if (res.code === 0) {
+      ElMessage.success(res.message)
       importVisible.value = false
       importFile.value = null
       loadCases()
@@ -411,7 +450,7 @@ async function doImport() {
 
 async function exportCases() {
   const res = await exportCasesApi()
-  if (res.code === 200) ElMessage.success(res.msg)
+  if (res.code === 0) ElMessage.success(res.message)
 }
 
 onMounted(() => {

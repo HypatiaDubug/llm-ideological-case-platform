@@ -33,7 +33,7 @@ const route = useRoute()
 
 const items = [
   { path: '/admin/review', name: '案例审核管理', icon: 'Checked' },
-  { path: '/admin/manage', name: '课程 & 思政标签管理', icon: 'CollectionTag' },
+  { path: '/admin/manage', name: '思政标签 & 专业管理', icon: 'CollectionTag' },
   { path: '/admin/users', name: '用户管理', icon: 'UserFilled' },
   { path: '/admin/statistics', name: '数据统计看板', icon: 'DataAnalysis' },
 ]

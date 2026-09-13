@@ -84,13 +84,27 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="驳回原因" min-width="160">
+          <el-table-column label="原因/补充要求" min-width="160">
             <template #default="{ row }">
-              <span class="reject">{{ row.status === '审核驳回' ? row.rejectReason : '-' }}</span>
+              <span class="reject">{{ row.status === '审核驳回' || row.status === '需补充' ? row.rejectReason : '-' }}</span>
             </template>
           </el-table-column>
         </el-table>
         <el-empty v-if="!subLoading && !submits.length" description="暂无提交记录" />
+      </el-tab-pane>
+
+      <el-tab-pane label="我的问答记录" name="asks">
+        <el-table v-loading="askLoading" :data="askRecords" stripe :header-cell-style="{ textAlign: 'center' }" :cell-style="{ textAlign: 'center' }">
+          <el-table-column label="提问时间" prop="createTime" width="160" />
+          <el-table-column label="案例" prop="caseTitle" width="180" />
+          <el-table-column label="问题" prop="question" min-width="200" />
+          <el-table-column label="回答" min-width="280">
+            <template #default="{ row }">
+              <div class="clamp-2 preview">{{ row.answer }}</div>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!askLoading && !askRecords.length" description="暂无问答记录" />
       </el-tab-pane>
     </el-tabs>
 
@@ -144,6 +158,7 @@ import {
   getFavoriteListApi,
   getAiRecordListApi,
   getSubmitListApi,
+  getAskRecordsApi,
   removeFavoriteApi,
   deleteAiRecordApi,
 } from '@/api'
@@ -158,12 +173,12 @@ const roleName = roleMap[user.role]?.name || '未知'
 const roleTag = roleMap[user.role]?.tag || 'info'
 
 const statusMap = {
-  待处理: { name: '待处理', type: 'info' },
+  草稿: { name: '草稿', type: 'info' },
   待审核: { name: '待审核', type: 'warning' },
-  审核通过: { name: '审核通过', type: 'success' },
+  已发布: { name: '已发布', type: 'success' },
   审核驳回: { name: '审核驳回', type: 'danger' },
   需补充: { name: '需补充', type: 'warning' },
-  已归档: { name: '已归档', type: 'info' },
+  已下线: { name: '已下线', type: 'info' },
 }
 
 // 收藏
@@ -179,7 +194,7 @@ async function loadFavorites(p = 1) {
   favLoading.value = true
   try {
     const res = await getFavoriteListApi({ page: p, size: favPageSize })
-    if (res.code === 200) {
+    if (res.code === 0) {
       favorites.value = res.data.records
       favTotal.value = res.data.total
     }
@@ -190,7 +205,7 @@ async function loadFavorites(p = 1) {
 
 async function removeFav(c) {
   const res = await removeFavoriteApi(c.id)
-  if (res.code === 200) {
+  if (res.code === 0) {
     ElMessage.success('已取消收藏')
     loadFavorites(favPage.value)
   }
@@ -203,7 +218,7 @@ async function loadRecords() {
   recLoading.value = true
   try {
     const res = await getAiRecordListApi({ page: 1, size: 20 })
-    if (res.code === 200) records.value = res.data.records
+    if (res.code === 0) records.value = res.data.records
   } finally {
     recLoading.value = false
   }
@@ -229,9 +244,22 @@ async function loadSubmits() {
   subLoading.value = true
   try {
     const res = await getSubmitListApi({ page: 1, size: 20 })
-    if (res.code === 200) submits.value = res.data.records
+    if (res.code === 0) submits.value = res.data.records
   } finally {
     subLoading.value = false
+  }
+}
+
+// 我的问答记录（FR-36）
+const askRecords = ref([])
+const askLoading = ref(false)
+async function loadAskRecords() {
+  askLoading.value = true
+  try {
+    const res = await getAskRecordsApi({ page: 1, size: 20 })
+    if (res.code === 0) askRecords.value = res.data.records
+  } finally {
+    askLoading.value = false
   }
 }
 
@@ -296,6 +324,7 @@ onMounted(() => {
   editForm.phone = user.userInfo?.phone || ''
   editForm.intro = user.userInfo?.intro || ''
   loadFavorites()
+  loadAskRecords()
   if (user.canAI) {
     loadRecords()
     loadSubmits()

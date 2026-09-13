@@ -34,6 +34,12 @@ const routes = [
     meta: { title: '我的生成记录', roles: ['teacher', 'admin'] },
   },
   {
+    path: '/my-cases',
+    name: 'MyCases',
+    component: () => import('@/views/MyCases.vue'),
+    meta: { title: '我的案例', roles: ['teacher', 'admin'] },
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: () => import('@/views/Profile.vue'),

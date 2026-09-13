@@ -18,12 +18,12 @@
               <el-option v-for="t in IDEOLOGICAL_TAGS" :key="t" :label="t" :value="t" />
             </el-select>
           </el-form-item>
-          <el-form-item label="专业知识点 / 主题" required>
+          <el-form-item label="关键词" required>
             <el-input
               v-model="form.knowledge"
               type="textarea"
               :rows="4"
-              placeholder="请输入您想生成的案例主题，例如：软件工程中的代码安全"
+              placeholder="请输入关键词，例如：软件工程中的代码安全、网络安全"
             />
           </el-form-item>
           <el-form-item label="适用专业">
@@ -36,13 +36,6 @@
             >
               <el-option v-for="p in PROFESSIONS" :key="p" :label="p" :value="p" />
             </el-select>
-          </el-form-item>
-          <el-form-item label="篇幅选择">
-            <el-radio-group v-model="form.length">
-              <el-radio-button value="short">短</el-radio-button>
-              <el-radio-button value="medium">中</el-radio-button>
-              <el-radio-button value="long">长</el-radio-button>
-            </el-radio-group>
           </el-form-item>
           <el-button
             type="primary"
@@ -58,37 +51,87 @@
       </div>
 
       <!-- 右侧结果展示 -->
-      <div class="result card">
-        <div class="result-title">
-          生成结果
-          <template v-if="done">
-            <el-tag size="small" type="success" effect="light">生成完成</el-tag>
-          </template>
-        </div>
-        <div v-loading="generating" class="result-body">
-          <div v-if="!resultText && !generating" class="placeholder">
-            <el-icon :size="48" color="#c0c4cc"><DocumentAdd /></el-icon>
-            <p>配置左侧参数后点击「生成案例」，AI 将流式生成专属思政案例</p>
+      <div class="result-col">
+        <div class="result card">
+          <div class="result-title">
+            生成结果
+            <template v-if="done">
+              <el-tag size="small" type="success" effect="light">生成完成</el-tag>
+            </template>
           </div>
-          <div v-else class="stream-text" :class="{ typing: generating }">{{ resultText }}</div>
+          <div class="result-body">
+            <div v-if="!resultText && !generating" class="placeholder">
+              <el-icon :size="48" color="#c0c4cc"><DocumentAdd /></el-icon>
+              <p>配置左侧参数后点击「生成案例」，AI 将流式生成专属思政案例</p>
+            </div>
+            <div v-else-if="!resultText && generating" class="placeholder">
+              <el-icon :size="40" color="#409eff" class="is-loading"><Loading /></el-icon>
+              <p>{{ progressText || '正在生成…' }}</p>
+            </div>
+            <div v-else class="stream-text" :class="{ typing: generating }">{{ resultText }}</div>
+          </div>
+
+          <!-- AI 辅助评价（V1.0 §3.7 / FR-38，非审核结论） -->
+          <div v-if="done && evaluation" class="eval-section">
+            <div class="eval-head">
+              <span class="ref-title">AI 辅助评价</span>
+              <el-tag size="small" type="warning" effect="light">仅供参考，非审核结论</el-tag>
+            </div>
+            <div class="eval-total">综合得分 <b>{{ evaluation.totalScore }}</b> 分 · {{ evaluation.issue }}</div>
+            <div class="eval-dims">
+              <div v-for="d in evaluation.dimensions" :key="d.name" class="eval-dim">
+                <span class="eval-dim-name">{{ d.name }}</span>
+                <el-progress :percentage="d.score" :stroke-width="8" style="flex: 1" />
+              </div>
+            </div>
+            <ul class="eval-suggest">
+              <li v-for="(s, i) in evaluation.suggestions" :key="i">{{ s }}</li>
+            </ul>
+            <div v-if="drafts.length" class="draft-scores">
+              <span>候选稿得分：</span>
+              <el-tag v-for="d in drafts" :key="d.index" size="small" effect="plain" class="mr-4">
+                第{{ d.index }}稿 {{ d.totalScore }}分
+              </el-tag>
+            </div>
+          </div>
+          <div v-if="done" class="result-actions">
+            <el-button @click="reGenerate">
+              <el-icon class="mr-4"><Refresh /></el-icon>重新生成
+            </el-button>
+            <el-button @click="copyText">
+              <el-icon class="mr-4"><CopyDocument /></el-icon>复制文本
+            </el-button>
+            <el-button @click="exportDoc">
+              <el-icon class="mr-4"><Download /></el-icon>导出文档
+            </el-button>
+            <el-button @click="handleSaveDraft">
+              <el-icon class="mr-4"><Document /></el-icon>保存草稿
+            </el-button>
+            <el-button type="primary" @click="submitVisible = true">
+              <el-icon class="mr-4"><Upload /></el-icon>提交审核
+            </el-button>
+            <el-button type="primary" plain :icon="ChatDotRound" @click="showChat = !showChat">
+              {{ showChat ? '关闭问答' : 'AI 问答' }}
+            </el-button>
+          </div>
         </div>
-        <div v-if="done" class="result-actions">
-          <el-button @click="reGenerate">
-            <el-icon class="mr-4"><Refresh /></el-icon>重新生成
-          </el-button>
-          <el-button @click="copyText">
-            <el-icon class="mr-4"><CopyDocument /></el-icon>复制文本
-          </el-button>
-          <el-button @click="exportDoc">
-            <el-icon class="mr-4"><Download /></el-icon>导出文档
-          </el-button>
-          <el-button type="primary" @click="submitVisible = true">
-            <el-icon class="mr-4"><Upload /></el-icon>提交审核
-          </el-button>
+
+        <!-- 参考案例（基于案例库生成） -->
+        <div v-if="references.length" class="ref-section">
+          <div class="ref-title">本次生成参考了案例库中的案例</div>
+          <div class="ref-list">
+            <div v-for="r in references" :key="r.id" class="ref-card">
+              <div class="ref-name clamp-1">{{ r.title }}</div>
+              <el-tag size="small" type="primary" effect="light">{{ r.category }}</el-tag>
+            </div>
+          </div>
         </div>
-        </div>
+
+        <!-- AI 问答 -->
+        <AIChatPanel v-if="showChat && done" :title="generatedTitle" :case-data="generatedCase" />
       </div>
-      </el-tab-pane>
+    </div>
+    </el-tab-pane>
 
       <el-tab-pane label="手动输入" name="manual">
         <ManualUploadForm />
@@ -138,12 +181,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
-import { generateCaseStreamApi, submitCaseApi } from '@/api'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ChatDotRound, Loading } from '@element-plus/icons-vue'
+import { generateCaseStreamApi, submitCaseApi, saveDraftApi } from '@/api'
 import { CASE_CATEGORIES, PROFESSIONS, IDEOLOGICAL_TAGS } from '@/api/mockData'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 import ManualUploadForm from '@/components/ManualUploadForm.vue'
+import AIChatPanel from '@/components/AIChatPanel.vue'
 
 const appStore = useAppStore()
 
@@ -152,13 +197,19 @@ const activeTab = ref('ai')
 const generating = ref(false)
 const done = ref(false)
 const resultText = ref('')
+const progressText = ref('')
+const evaluation = ref(null)
+const drafts = ref([])
 const currentRecord = ref(null)
+const references = ref([])
+const generatedCase = ref(null)
+const showChat = ref(false)
+const generatedTitle = computed(() => (generatedCase.value?.title || 'AI 生成的案例'))
 
 const form = reactive({
   ideological: '',
   knowledge: '',
   profession: [],
-  length: 'medium',
 })
 
 async function handleGenerate() {
@@ -169,17 +220,29 @@ async function handleGenerate() {
   generating.value = true
   done.value = false
   resultText.value = ''
+  progressText.value = ''
+  evaluation.value = null
+  drafts.value = []
   try {
     const res = await generateCaseStreamApi(form, {
+      // 过程事件：分稿进度 / 评分中（V1.0 FR-29）
+      onEvent: (e) => {
+        if (e && e.message) progressText.value = e.message
+      },
       onChunk: (seg, received) => {
+        progressText.value = ''
         resultText.value = received
       },
     })
-    if (res.code === 200) {
+    if (res.code === 0) {
       currentRecord.value = { id: res.data.id, content: res.data.content }
+      references.value = res.data.references || []
+      generatedCase.value = res.data.data || null
+      evaluation.value = res.data.evaluation || null
+      drafts.value = res.data.drafts || []
       done.value = true
     } else {
-      ElMessage.error(res.msg)
+      ElMessage.error(res.message)
     }
   } finally {
     generating.value = false
@@ -277,16 +340,34 @@ function openSubmit() {
   })
 }
 
+// 生成结果另存为草稿（FR-31）
+async function handleSaveDraft() {
+  const parsed = parseGeneratedContent(resultText.value)
+  const payload = {
+    title: parsed.title,
+    category: '行业案例',
+    profession: [...form.profession],
+    ideological_elements: parsed.ideological.length ? parsed.ideological : [form.ideological].filter(Boolean),
+    background: parsed.background,
+    process: parsed.process,
+    result: parsed.result,
+    teaching_value: parsed.teaching_value,
+  }
+  const res = await saveDraftApi(payload)
+  if (res.code === 0) ElMessage.success(res.message || '草稿已保存')
+  else ElMessage.error(res.message)
+}
+
 async function handleSubmit() {
   await submitFormRef.value.validate()
   submitting.value = true
   try {
     const res = await submitCaseApi(submitForm)
-    if (res.code === 200) {
-      ElMessage.success(res.msg || '提交成功')
+    if (res.code === 0) {
+      ElMessage.success(res.message || '提交成功')
       submitVisible.value = false
     } else {
-      ElMessage.error(res.msg)
+      ElMessage.error(res.message)
     }
   } finally {
     submitting.value = false
@@ -300,7 +381,6 @@ onMounted(() => {
     form.ideological = pre.ideological || ''
     form.knowledge = pre.knowledge || ''
     form.profession = pre.profession || []
-    form.length = pre.length || 'medium'
     appStore.setAiPrefill(null)
   }
 })
@@ -332,9 +412,35 @@ watch(submitVisible, (v) => {
 .generate-btn {
   width: 100%;
 }
-.result {
+.result-col {
   flex: 1;
   min-width: 0;
+}
+.ref-section {
+  margin-top: 16px;
+}
+.ref-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 10px;
+}
+.ref-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ref-card {
+  flex: 0 0 200px;
+  padding: 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.ref-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
 }
 .result-title {
   display: flex;
@@ -384,5 +490,58 @@ watch(submitVisible, (v) => {
   gap: 10px;
   margin-top: 16px;
   flex-wrap: wrap;
+}
+.eval-section {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid #faecd8;
+  background: #fdf6ec;
+  border-radius: 8px;
+}
+.eval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.eval-total {
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 10px;
+}
+.eval-total b {
+  color: #e6a23c;
+  font-size: 18px;
+}
+.eval-dims {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.eval-dim {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.eval-dim-name {
+  width: 80px;
+  font-size: 13px;
+  color: #606266;
+  flex-shrink: 0;
+}
+.eval-suggest {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.8;
+}
+.draft-scores {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #909399;
+}
+.mr-4 {
+  margin-right: 4px;
 }
 </style>
