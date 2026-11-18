@@ -22,6 +22,14 @@
             <el-tag size="small" type="success" effect="light">{{ row.ideological_direction }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="辅助评价" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.evaluation" size="small" type="warning" effect="light">
+              {{ row.evaluation.totalScore }} 分
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="内容预览" min-width="240">
           <template #default="{ row }">
             <div class="preview clamp-2">{{ row.contentPreview }}</div>
@@ -50,6 +58,19 @@
 
     <!-- 查看完整内容 -->
     <el-dialog v-model="viewVisible" title="生成内容" width="760px" top="6vh">
+      <!-- 辅助评价（FR-32/38） -->
+      <div v-if="viewRecord?.evaluation" class="eval-box">
+        <div class="eval-total">
+          综合得分 <b>{{ viewRecord.evaluation.totalScore }}</b> 分 · {{ viewRecord.evaluation.issue }}
+        </div>
+        <div v-for="d in viewRecord.evaluation.dimensions" :key="d.name" class="eval-dim">
+          <span class="eval-dim-name">{{ d.name }}</span>
+          <el-progress :percentage="d.score" :stroke-width="8" style="flex: 1" />
+        </div>
+        <ul class="eval-suggest">
+          <li v-for="(s, i) in viewRecord.evaluation.suggestions" :key="i">{{ s }}</li>
+        </ul>
+      </div>
       <div class="view-content" style="white-space: pre-wrap">{{ viewRecord?.content }}</div>
       <template #footer>
         <el-button @click="copyContent">复制文本</el-button>
@@ -81,7 +102,7 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getAiRecordListApi(form)
-    if (res.code === 200) {
+    if (res.code === 0) {
       list.value = res.data.records
       total.value = res.data.total
     }
@@ -126,8 +147,8 @@ async function removeRecord(row) {
     return
   }
   const res = await deleteAiRecordApi(row.id)
-  if (res.code === 200) {
-    ElMessage.success(res.msg || '删除成功')
+  if (res.code === 0) {
+    ElMessage.success(res.message || '删除成功')
     fetchList()
   }
 }
@@ -158,5 +179,39 @@ onMounted(fetchList)
   border-radius: 8px;
   padding: 16px;
   white-space: pre-wrap;
+}
+.eval-box {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #faecd8;
+  background: #fdf6ec;
+  border-radius: 8px;
+}
+.eval-total {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.eval-total b {
+  color: #e6a23c;
+  font-size: 18px;
+}
+.eval-dim {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.eval-dim-name {
+  width: 80px;
+  font-size: 13px;
+  color: #606266;
+  flex-shrink: 0;
+}
+.eval-suggest {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.8;
 }
 </style>

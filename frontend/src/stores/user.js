@@ -27,15 +27,15 @@ export const useUserStore = defineStore('user', {
   actions: {
     async login(form) {
       const res = await loginApi(form)
-      if (res.code !== 200) {
-        ElMessage.error(res.msg)
+      if (res.code !== 0) {
+        ElMessage.error(res.message)
         return false
       }
       this.token = res.data.token
       localStorage.setItem('token', res.data.token)
       // 登录返回只有 token/username/role/avatar，补充拉取完整用户信息
       const infoRes = await getUserInfoApi()
-      if (infoRes.code === 200) {
+      if (infoRes.code === 0) {
         this.userInfo = infoRes.data
         localStorage.setItem('userInfo', JSON.stringify(infoRes.data))
       } else {
@@ -62,7 +62,7 @@ export const useUserStore = defineStore('user', {
     },
     async updateInfo(data) {
       const res = await updateUserInfoApi(data)
-      if (res.code === 200) {
+      if (res.code === 0) {
         this.userInfo = res.data
         localStorage.setItem('userInfo', JSON.stringify(res.data))
         return true
@@ -71,11 +71,11 @@ export const useUserStore = defineStore('user', {
     },
     async changePassword(payload) {
       const res = await changePasswordApi(payload)
-      if (res.code !== 200) {
-        ElMessage.error(res.msg)
+      if (res.code !== 0) {
+        ElMessage.error(res.message)
         return false
       }
-      ElMessage.success(res.msg || '密码修改成功')
+      ElMessage.success(res.message || '密码修改成功')
       return true
     },
     hasRole(roles) {

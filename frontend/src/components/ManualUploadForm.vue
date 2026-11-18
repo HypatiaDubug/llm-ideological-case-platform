@@ -1,5 +1,18 @@
 <template>
   <div class="card upload-form">
+    <div class="upload-row">
+      <el-upload
+        :auto-upload="false"
+        :show-file-list="false"
+        accept=".txt,.md,.doc,.docx"
+        :on-change="onUploadFile"
+      >
+        <el-button :loading="parsing">
+          <el-icon class="mr-4"><Upload /></el-icon>上传原文（自动抽取字段）
+        </el-button>
+      </el-upload>
+      <span class="upload-tip">支持 txt/md，抽取后请核对补全</span>
+    </div>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item label="案例标题" prop="title">
         <el-input v-model="form.title" placeholder="10-20 字，体现核心事件与成果" />
@@ -61,6 +74,7 @@
       </el-form-item>
       <el-form-item>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">提交审核</el-button>
+        <el-button :loading="saving" @click="handleSaveDraft">保存草稿</el-button>
         <el-button @click="resetForm">清空重填</el-button>
       </el-form-item>
     </el-form>
@@ -68,16 +82,23 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { submitCaseApi } from '@/api'
+import { Upload } from '@element-plus/icons-vue'
+import { submitCaseApi, saveDraftApi, parseCaseApi } from '@/api'
 import { CASE_CATEGORIES, PROFESSIONS, IDEOLOGICAL_TAGS } from '@/api/mockData'
 
-const emit = defineEmits(['submitted'])
+const props = defineProps({
+  initial: { type: Object, default: null },
+})
+const emit = defineEmits(['submitted', 'saved'])
 
 const formRef = ref(null)
 const submitting = ref(false)
+const saving = ref(false)
+const parsing = ref(false)
 const emptyForm = () => ({
+  id: null,
   title: '',
   category: '',
   source: '',
@@ -97,20 +118,74 @@ const rules = {
   category: [{ required: true, message: '请选择案例分类', trigger: 'change' }],
 }
 
+watch(
+  () => props.initial,
+  (v) => {
+    if (v) Object.assign(form, emptyForm(), v)
+  },
+  { immediate: true }
+)
+
 async function handleSubmit() {
   await formRef.value.validate()
   submitting.value = true
   try {
     const res = await submitCaseApi(form)
-    if (res.code === 200) {
-      ElMessage.success(res.msg || '提交成功，等待审核')
+    if (res.code === 0) {
+      ElMessage.success(res.message || '提交成功，等待审核')
       emit('submitted')
       resetForm()
     } else {
-      ElMessage.error(res.msg)
+      ElMessage.error(res.message)
     }
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleSaveDraft() {
+  if (!form.title) {
+    ElMessage.warning('请至少填写案例标题')
+    return
+  }
+  saving.value = true
+  try {
+    const res = await saveDraftApi(form)
+    if (res.code === 0) {
+      ElMessage.success(res.message || '草稿已保存')
+      if (res.data?.id) form.id = res.data.id
+      emit('saved')
+    } else {
+      ElMessage.error(res.message)
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+// 上传原文 → 抽取候选字段（FR-22）
+async function onUploadFile(file) {
+  const raw = file.raw
+  if (!raw) return
+  parsing.value = true
+  try {
+    const text = await raw.text()
+    const res = await parseCaseApi(text)
+    if (res.code === 0 && res.data) {
+      Object.assign(form, {
+        title: res.data.title || form.title,
+        background: res.data.background || form.background,
+        process: res.data.process || form.process,
+        result: res.data.result || form.result,
+      })
+      ElMessage.success(res.message || '已抽取候选字段')
+    } else {
+      ElMessage.error(res.message || '抽取失败')
+    }
+  } catch {
+    ElMessage.error('文件读取失败')
+  } finally {
+    parsing.value = false
   }
 }
 
@@ -123,5 +198,18 @@ function resetForm() {
 <style scoped>
 .upload-form {
   max-width: 760px;
+}
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.upload-tip {
+  font-size: 12px;
+  color: #909399;
+}
+.mr-4 {
+  margin-right: 4px;
 }
 </style>

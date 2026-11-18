@@ -8,7 +8,7 @@ import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const service = axios.create({
-  baseURL: '/api',
+  baseURL: '/api/v1',
   timeout: 30000,
   withCredentials: true,
 })
@@ -28,11 +28,11 @@ service.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// 响应拦截器：统一处理 code/401/403/500
+// 响应拦截器：统一处理 code（0 为成功）/401/403/500
 service.interceptors.response.use(
   (response) => {
     const res = response.data
-    if (res.code !== 200) {
+    if (res.code !== 0) {
       if (res.code === 401) {
         localStorage.removeItem('token')
         localStorage.removeItem('userInfo')
@@ -43,9 +43,9 @@ service.interceptors.response.use(
       } else if (res.code === 500) {
         ElMessage.error('服务异常，请稍后重试')
       } else {
-        ElMessage.error(res.msg || '请求失败')
+        ElMessage.error(res.message || '请求失败')
       }
-      return Promise.reject(new Error(res.msg || 'Error'))
+      return Promise.reject(new Error(res.message || 'Error'))
     }
     return res
   },

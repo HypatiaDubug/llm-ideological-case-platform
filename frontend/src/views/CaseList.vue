@@ -14,12 +14,6 @@
         />
       </div>
       <div class="filter-group">
-        <div class="group-label">案例分类</div>
-        <el-select v-model="form.category" placeholder="全部分类" clearable style="width: 100%">
-          <el-option v-for="c in CASE_CATEGORIES" :key="c" :label="c" :value="c" />
-        </el-select>
-      </div>
-      <div class="filter-group">
         <div class="group-label">专业</div>
         <el-select
           v-model="form.profession"
@@ -93,7 +87,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { getCaseListApi, getTagListApi, addFavoriteApi, removeFavoriteApi } from '@/api'
-import { CASE_CATEGORIES, PROFESSIONS } from '@/api/mockData'
+import { PROFESSIONS } from '@/api/mockData'
 import { useAppStore } from '@/stores/app'
 import CaseCard from '@/components/CaseCard.vue'
 import CaseDetailDialog from '@/components/CaseDetailDialog.vue'
@@ -108,7 +102,6 @@ const loading = ref(false)
 
 const form = reactive({
   keyword: '',
-  category: null,
   profession: null,
   tag: null,
   sort: 'new',
@@ -125,7 +118,6 @@ async function fetchList() {
   try {
     const params = {
       keyword: form.keyword,
-      category: form.category,
       profession: form.profession,
       tag: form.tag,
       sort: form.sort,
@@ -133,7 +125,7 @@ async function fetchList() {
       size: form.size,
     }
     const res = await getCaseListApi(params)
-    if (res.code === 200) {
+    if (res.code === 0) {
       list.value = res.data.records
       total.value = res.data.total
     }
@@ -150,7 +142,6 @@ function doSearch() {
 function reset() {
   Object.assign(form, {
     keyword: '',
-    category: null,
     profession: null,
     tag: null,
     sort: 'new',
@@ -179,10 +170,10 @@ function openDetail(c) {
 async function toggleFav(c) {
   if (c.isFavorite) {
     const res = await removeFavoriteApi(c.id)
-    if (res.code === 200) c.isFavorite = false
+    if (res.code === 0) c.isFavorite = false
   } else {
     const res = await addFavoriteApi(c.id)
-    if (res.code === 200) c.isFavorite = true
+    if (res.code === 0) c.isFavorite = true
   }
 }
 
@@ -191,7 +182,6 @@ function goGenerate(c) {
     ideological: (c.ideological_elements && c.ideological_elements[0]) || '',
     knowledge: '',
     profession: c.profession || [],
-    length: 'medium',
   })
   router.push('/ai-generate')
 }
@@ -201,7 +191,6 @@ onMounted(async () => {
   const pre = appStore.filter
   Object.assign(form, {
     keyword: pre.keyword || '',
-    category: pre.category || null,
     profession: pre.profession || null,
     tag: pre.tag || null,
     sort: pre.sort || 'new',

@@ -13,6 +13,10 @@
         <!-- 基础信息 -->
         <div class="info-row">
           <span class="info-item"><el-icon><CollectionTag /></el-icon>案例分类：{{ detail.category }}</span>
+          <span class="info-item">
+            <el-icon><Position /></el-icon>来源方式：
+            <el-tag size="small" :type="sourceTypeTag" effect="light">{{ sourceTypeName }}</el-tag>
+          </span>
           <span class="info-item"><el-icon><Link /></el-icon>来源：{{ detail.source }}</span>
           <span class="info-item"><el-icon><Calendar /></el-icon>发布时间：{{ formatDate(detail.publish_date) }}</span>
           <span class="info-item"><el-icon><Document /></el-icon>版本：{{ detail.version }}</span>
@@ -82,22 +86,6 @@
           </el-button>
         </div>
 
-        <!-- 相关推荐 -->
-        <div v-if="recommends.length" class="recommend">
-          <div class="recommend-title">相关推荐</div>
-          <div class="recommend-list">
-            <div
-              v-for="r in recommends"
-              :key="r.id"
-              class="recommend-card"
-              @click="switchTo(r.id)"
-            >
-              <div class="r-title clamp-2">{{ r.title }}</div>
-              <el-tag size="small" type="primary" effect="light">{{ r.category }}</el-tag>
-            </div>
-          </div>
-        </div>
-
         <!-- 底部操作 -->
         <div class="footer">
           <el-button
@@ -110,7 +98,13 @@
           <el-button type="primary" plain @click="$emit('generate-similar', detail)">
             <el-icon class="mr-4"><MagicStick /></el-icon>生成同类案例
           </el-button>
+          <el-button type="primary" plain :icon="ChatDotRound" @click="showChat = !showChat">
+            {{ showChat ? '关闭问答' : 'AI 问答' }}
+          </el-button>
         </div>
+
+        <!-- AI 问答 -->
+        <AIChatPanel v-if="showChat" :title="detail.title" :case-data="detail" />
       </template>
       <el-empty v-else-if="!loading" description="案例不存在" />
     </div>
@@ -118,10 +112,11 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
-import { Link } from '@element-plus/icons-vue'
-import { getCaseDetailApi, getRecommendApi, addFavoriteApi, removeFavoriteApi } from '@/api'
+import { ref, watch, computed } from 'vue'
+import { Link, ChatDotRound } from '@element-plus/icons-vue'
+import { getCaseDetailApi, addFavoriteApi, removeFavoriteApi } from '@/api'
 import { ElMessage } from 'element-plus'
+import AIChatPanel from '@/components/AIChatPanel.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -131,15 +126,25 @@ const emit = defineEmits(['update:modelValue', 'generate-similar'])
 
 const loading = ref(false)
 const detail = ref(null)
-const recommends = ref([])
+const showChat = ref(false)
+
+// 来源方式取值见需求规格文档 V1.0 §4.8，值本身即为中文
+const sourceTypeMap = {
+  网络采集: 'primary',
+  人工导入: 'info',
+  教师上传: 'warning',
+  AI生成: 'success',
+}
+const sourceTypeName = computed(() => detail.value?.sourceType || '未知')
+const sourceTypeTag = computed(() => sourceTypeMap[detail.value?.sourceType] || 'info')
 
 const statusTypeMap = {
-  待处理: 'info',
+  草稿: 'info',
   待审核: 'warning',
-  审核通过: 'success',
+  已发布: 'success',
   审核驳回: 'danger',
   需补充: 'warning',
-  已归档: 'info',
+  已下线: 'info',
 }
 const statusType = (s) => statusTypeMap[s] || 'info'
 
@@ -156,25 +161,11 @@ async function loadDetail() {
   if (!props.caseId) return
   loading.value = true
   detail.value = null
-  recommends.value = []
   try {
-    const [d, r] = await Promise.all([
-      getCaseDetailApi(props.caseId),
-      getRecommendApi(props.caseId),
-    ])
-    if (d.code === 200) detail.value = d.data
-    if (r.code === 200) recommends.value = r.data
+    const d = await getCaseDetailApi(props.caseId)
+    if (d.code === 0) detail.value = d.data
   } finally {
     loading.value = false
-  }
-}
-
-async function switchTo(id) {
-  const d = await getCaseDetailApi(id)
-  if (d.code === 200) {
-    detail.value = d.data
-    const r = await getRecommendApi(id)
-    recommends.value = r.data || []
   }
 }
 
@@ -182,10 +173,10 @@ async function toggleFav() {
   if (!detail.value) return
   if (detail.value.isFavorite) {
     const res = await removeFavoriteApi(detail.value.id)
-    if (res.code === 200) detail.value.isFavorite = false
+    if (res.code === 0) detail.value.isFavorite = false
   } else {
     const res = await addFavoriteApi(detail.value.id)
-    if (res.code === 200) detail.value.isFavorite = true
+    if (res.code === 0) detail.value.isFavorite = true
   }
 }
 
@@ -248,36 +239,6 @@ watch(
   line-height: 2;
   font-size: 14px;
   color: #303133;
-}
-.recommend {
-  margin-top: 8px;
-}
-.recommend-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.recommend-list {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-}
-.recommend-card {
-  flex: 0 0 200px;
-  padding: 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.recommend-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
-}
-.r-title {
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
 }
 .footer {
   margin-top: 16px;

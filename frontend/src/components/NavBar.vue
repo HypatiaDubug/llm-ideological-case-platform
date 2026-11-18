@@ -63,6 +63,7 @@ const menus = [
   { path: '/', name: '首页', icon: 'HomeFilled' },
   { path: '/cases', name: '案例库', icon: 'Reading' },
   { path: '/ai-generate', name: '生成和上传案例', icon: 'MagicStick', roles: ['teacher', 'admin'] },
+  { path: '/my-cases', name: '我的案例', icon: 'Files', roles: ['teacher', 'admin'] },
   { path: '/profile', name: '个人中心', icon: 'User' },
   { path: '/admin', name: '后台管理', icon: 'Setting', roles: ['admin'] },
 ]
